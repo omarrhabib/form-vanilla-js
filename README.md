@@ -1,4 +1,3 @@
-# Store form entries in a database
 ## Stack:
 - HTML/CSS
 - Vanilla JS
