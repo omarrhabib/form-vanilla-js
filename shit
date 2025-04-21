@@ -1,0 +1,210 @@
+// Project structure:
+// 
+// project-root/
+// ├─ package.json
+// ├─ .env
+// ├─ server.js
+// ├─ db.js
+// └─ public/
+//    ├─ index.html
+//    ├─ style.css
+//    └─ script.js
+
+/* ---------- package.json ---------- */
+```json
+{
+  "name": "form-submission-app",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mysql2": "^3.2.0",
+    "dotenv": "^16.0.0"
+  }
+}
+```
+
+/* ---------- .env ---------- */
+```
+DB_HOST=localhost
+DB_USER=yourusername
+DB_PASSWORD=yourpassword
+DB_NAME=yourdbname
+PORT=3000
+```
+
+/* ---------- db.js ---------- */
+```js
+const mysql = require('mysql2');
+require('dotenv').config();
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+module.exports = pool.promise();
+```
+
+/* ---------- server.js ---------- */
+```js
+const express = require('express');
+const path = require('path');
+const db = require('./db');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Route to handle form submission
+app.post('/submit-form', async (req, res) => {
+  try {
+    const { patientID, input2, input3 } = req.body;
+    const [result] = await db.execute(
+      'INSERT INTO `FORM_TABLE` (PatientID, `Input 2`, `Input 3`) VALUES (?, ?, ?)',
+      [patientID, input2, input3]
+    );
+    // result.insertId is the generated FormID
+    res.status(201).json({ formID: result.insertId, message: 'Form submitted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to submit form' });
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+```
+
+/* ---------- SQL: Create table ---------- */
+```sql
+CREATE TABLE `FORM_TABLE` (
+  FormID INT AUTO_INCREMENT PRIMARY KEY,
+  PatientID INT NOT NULL,
+  `Input 2` TEXT,
+  `Input 3` TEXT
+);
+```
+
+/* ---------- public/index.html ---------- */
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Form Submission</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Submit Form</h1>
+    <form id="dataForm">
+      <label for="patientID">Patient ID:</label>
+      <input type="number" id="patientID" name="patientID" required>
+
+      <label for="input2">Input 2:</label>
+      <input type="text" id="input2" name="input2">
+
+      <label for="input3">Input 3:</label>
+      <input type="text" id="input3" name="input3">
+
+      <button type="submit">Submit</button>
+    </form>
+    <div id="responseMessage"></div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
+```
+
+/* ---------- public/style.css ---------- */
+```css
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f4;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.container {
+  background: #fff;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+label {
+  display: block;
+  margin-top: 10px;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+  box-sizing: border-box;
+}
+
+button {
+  margin-top: 15px;
+  padding: 10px 15px;
+  border: none;
+  background: #28a745;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+#responseMessage {
+  margin-top: 10px;
+}
+```
+
+/* ---------- public/script.js ---------- */
+```js
+document.getElementById('dataForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  const patientID = document.getElementById('patientID').value;
+  const input2 = document.getElementById('input2').value;
+  const input3 = document.getElementById('input3').value;
+
+  try {
+    const response = await fetch('/submit-form', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ patientID, input2, input3 })
+    });
+
+    const result = await response.json();
+    if(response.ok) {
+      document.getElementById('responseMessage').innerText = `Form submitted. FormID: ${result.formID}`;
+      document.getElementById('dataForm').reset();
+    } else {
+      document.getElementById('responseMessage').innerText = `Error: ${result.error}`;
+    }
+  } catch(err) {
+    document.getElementById('responseMessage').innerText = 'Network error';
+  }
+});
